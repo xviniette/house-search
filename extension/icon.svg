@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4F46E5"/>
+      <stop offset="100%" stop-color="#7C3AED"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+  <!-- House -->
+  <path d="M64 28 L30 56 L30 95 L58 95 L58 72 L70 72 L70 95 L98 95 L98 56 Z" fill="white" opacity="0.95"/>
+  <!-- Roof accent -->
+  <path d="M64 28 L30 56 L36 56 L64 34 L92 56 L98 56 Z" fill="white"/>
+  <!-- DPE bar green -->
+  <rect x="40" y="62" width="22" height="6" rx="2" fill="#319834"/>
+  <!-- DPE bar yellow -->
+  <rect x="40" y="71" width="28" height="6" rx="2" fill="#fbfe06"/>
+  <!-- DPE bar orange -->
+  <rect x="40" y="80" width="34" height="6" rx="2" fill="#f78622"/>
+  <!-- Magnifying glass -->
+  <circle cx="92" cy="92" r="16" fill="none" stroke="white" stroke-width="5" opacity="0.9"/>
+  <line x1="103" y1="103" x2="116" y2="116" stroke="white" stroke-width="5" stroke-linecap="round" opacity="0.9"/>
+</svg>

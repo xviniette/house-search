@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "DPE Finder",
-  "version": "1.1.0",
-  "description": "Retrouve l'adresse d'un bien immobilier via la base DPE ADEME depuis LeBonCoin et SeLoger",
+  "name": "DPE Finder - Trouver l'adresse d'un bien immobilier",
+  "version": "1.0.0",
+  "description": "Retrouvez l'adresse exacte d'un bien immobilier en vente sur LeBonCoin ou SeLoger grâce à la base DPE ADEME (diagnostic de performance énergétique).",
   "permissions": ["activeTab"],
   "content_scripts": [
     {
@@ -17,6 +17,7 @@
     }
   ],
   "icons": {
+    "16": "icon16.png",
     "48": "icon48.png",
     "128": "icon128.png"
   }
