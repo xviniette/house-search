@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPE Finder</title>
+  <script src="https://unpkg.com/petite-vue"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen text-gray-900">
+
+<div id="app" @vue:mounted="onMounted">
+
+  <div class="bg-indigo-600 px-6 py-5">
+    <h1 class="text-white text-xl font-bold">DPE Finder</h1>
+    <p class="text-indigo-200 text-sm">Retrouver l'adresse d'un bien via la base ADEME</p>
+  </div>
+
+  <div class="max-w-3xl mx-auto px-4 py-6">
+
+    <div class="bg-white rounded-xl shadow-sm p-5 mb-5">
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Commune</label>
+          <input v-model="filters.commune" placeholder="Paris, Lyon..." class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Surface (m²)</label>
+          <input v-model="filters.surface" type="text" inputmode="numeric" placeholder="70" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Type de bien</label>
+          <select v-model="filters.type_batiment" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 bg-white">
+            <option value="">Tous</option>
+            <option value="maison">Maison</option>
+            <option value="appartement">Appartement</option>
+            <option value="immeuble">Immeuble</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">DPE</label>
+          <select v-model="filters.etiquette_dpe" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 bg-white">
+            <option value="">Tous</option>
+            <option v-for="l in dpeLabels" :value="l">{{ l }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Année construction</label>
+          <input v-model="filters.annee_construction" type="text" inputmode="numeric" placeholder="2015" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Conso (kWh/m².an)</label>
+          <input v-model="filters.conso" type="text" inputmode="numeric" placeholder="68" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">GES (kgCO₂/m².an)</label>
+          <input v-model="filters.ges" type="text" inputmode="numeric" placeholder="13" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Date DPE (année)</label>
+          <input v-model="filters.dpe_year" type="text" inputmode="numeric" placeholder="2024" min="2000" max="2030" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Mois</label>
+          <select v-model="filters.dpe_month" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 bg-white">
+            <option value="">—</option>
+            <option v-for="m in months" :value="m.v">{{ m.l }}</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-[11px] uppercase tracking-wide text-gray-400 mb-1">Jour</label>
+          <input v-model="filters.dpe_day" type="text" inputmode="numeric" placeholder="15" min="1" max="31" class="w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500">
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2 mt-4">
+        <button @click="search(1)" :disabled="loading" class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors">
+          {{ loading ? 'Recherche...' : 'Rechercher' }}
+        </button>
+        <button @click="reset" class="border border-indigo-500 text-indigo-600 font-semibold text-sm px-5 py-2.5 rounded-lg hover:bg-indigo-50 transition-colors">
+          Effacer
+        </button>
+      </div>
+    </div>
+
+    <div v-if="error" class="bg-red-50 text-red-600 text-sm p-4 rounded-lg mb-4">{{ error }}</div>
+
+    <div v-if="results">
+      <div class="flex items-baseline justify-between mb-3">
+        <h2 class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Resultats</h2>
+        <span class="text-sm text-gray-400">{{ results.total }} adresse{{ results.total > 1 ? 's' : '' }}</span>
+      </div>
+
+      <div v-if="results.results.length === 0" class="text-center py-12 text-gray-400">
+        <div class="text-5xl mb-3">🔍</div>
+        <p class="text-sm">Aucun DPE correspondant dans la base.</p>
+      </div>
+
+      <div v-for="r in results.results" class="bg-white rounded-lg mb-3 shadow-sm border border-transparent hover:border-indigo-400 hover:shadow-md transition-all overflow-hidden">
+        <a :href="mapsUrl(r)" target="_blank" rel="noopener" class="block p-3.5 no-underline text-inherit">
+          <div class="font-semibold text-sm">{{ r.adresse_ban || 'Adresse non renseignée' }}</div>
+          <div class="flex flex-wrap gap-x-3 mt-1 text-xs text-gray-500">
+            <span v-if="r.date_etablissement_dpe">{{ r.date_etablissement_dpe.slice(0, 10) }}</span>
+            <span v-if="r.etiquette_dpe" :style="{ color: dpeColor(r.etiquette_dpe) }">{{ r.etiquette_dpe }}</span>
+            <span v-if="r.surface_habitable_logement">{{ r.surface_habitable_logement }} m²</span>
+          </div>
+        </a>
+        <div v-if="r._geopoint" class="h-44">
+          <iframe :src="satUrl(r)" class="w-full h-full border-0" loading="lazy"></iframe>
+        </div>
+      </div>
+
+      <div v-if="results.pages > 1" class="flex justify-center items-center gap-2 mt-4">
+        <button @click="search(results.page - 1)" :disabled="results.page <= 1" class="px-3 py-1.5 border border-gray-200 rounded-md bg-white text-sm disabled:opacity-40">Precedent</button>
+        <span class="text-sm text-gray-400">{{ results.page }} / {{ results.pages }}</span>
+        <button @click="search(results.page + 1)" :disabled="results.page >= results.pages" class="px-3 py-1.5 border border-gray-200 rounded-md bg-white text-sm disabled:opacity-40">Suivant</button>
+      </div>
+    </div>
+
+    <div v-if="!results && !loading && !error" class="text-center py-16 text-gray-400">
+      <div class="text-5xl mb-3">🏠</div>
+      <p class="text-sm">Renseignez au moins un critere puis lancez la recherche,<br>ou utilisez l'extension Chrome depuis LeBonCoin.</p>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const ADEME_BASE = 'https://data.ademe.fr/data-fair/api/v1/datasets/meg-83tjwtg8dyz4vv7h1dqe/lines';
+
+  PetiteVue.createApp({
+    filters: {
+      commune: '',
+      code_postal: '',
+      surface: '',
+      type_batiment: '',
+      etiquette_dpe: '',
+      annee_construction: '',
+      conso: '',
+      ges: '',
+      dpe_year: '',
+      dpe_month: '',
+      dpe_day: '',
+    },
+    results: null,
+    loading: false,
+    error: '',
+    dpeLabels: ['A', 'B', 'C', 'D', 'E', 'F', 'G'],
+    months: [
+      {v:'01',l:'Janvier'},{v:'02',l:'Février'},{v:'03',l:'Mars'},{v:'04',l:'Avril'},
+      {v:'05',l:'Mai'},{v:'06',l:'Juin'},{v:'07',l:'Juillet'},{v:'08',l:'Août'},
+      {v:'09',l:'Septembre'},{v:'10',l:'Octobre'},{v:'11',l:'Novembre'},{v:'12',l:'Décembre'},
+    ],
+
+    onMounted() {
+      const params = new URLSearchParams(location.search);
+      for (const [key, val] of params) {
+        if (key in this.filters && val) {
+          this.filters[key] = (key === 'surface' || key === 'conso' || key === 'ges') ? Number(val) : val;
+        }
+      }
+      const dpeDate = params.get('dpe_date');
+      if (dpeDate) {
+        const parts = dpeDate.split('-');
+        if (parts[0]) this.filters.dpe_year = parts[0];
+        if (parts[1]) this.filters.dpe_month = parts[1];
+        if (parts[2]) this.filters.dpe_day = parseInt(parts[2], 10) || '';
+      }
+      if (params.get('from') === 'extension') this.search(1);
+    },
+
+    async search(page) {
+      this.loading = true;
+      this.error = '';
+
+      const qs = [];
+      if (this.filters.commune) qs.push('nom_commune_ban:' + this.filters.commune);
+      if (this.filters.code_postal) qs.push('code_postal_ban:' + this.filters.code_postal);
+      if (this.filters.etiquette_dpe) qs.push('etiquette_dpe:' + this.filters.etiquette_dpe);
+      if (this.filters.type_batiment) qs.push('type_batiment:' + this.filters.type_batiment);
+      if (this.filters.annee_construction) qs.push('annee_construction:' + this.filters.annee_construction);
+      if (this.filters.dpe_year) {
+        let d = String(this.filters.dpe_year);
+        if (this.filters.dpe_month) d += '-' + this.filters.dpe_month;
+        if (this.filters.dpe_month && this.filters.dpe_day) d += '-' + String(this.filters.dpe_day).padStart(2, '0');
+        qs.push('date_etablissement_dpe:' + d);
+      }
+      if (this.filters.conso) {
+        const c = Number(this.filters.conso);
+        const m = Math.max(1, Math.round(c * 0.05));
+        qs.push('conso_5_usages_par_m2_ep:[' + (c - m) + ' TO ' + (c + m) + ']');
+      }
+      if (this.filters.ges) {
+        const g = Number(this.filters.ges);
+        const m = Math.max(1, Math.round(g * 0.05));
+        qs.push('emission_ges_5_usages_par_m2:[' + (g - m) + ' TO ' + (g + m) + ']');
+      }
+
+      if (qs.length === 0) {
+        this.error = 'Renseignez au moins un critere.';
+        this.loading = false;
+        return;
+      }
+
+      const limit = 30;
+      const params = new URLSearchParams({
+        size: String(limit),
+        page: String(Math.max(1, page)),
+        qs: qs.join(' AND '),
+      });
+
+      try {
+        const res = await fetch(ADEME_BASE + '?' + params);
+        if (!res.ok) throw new Error('Erreur ADEME ' + res.status);
+        const data = await res.json();
+        let sorted = data.results;
+        if (this.filters.surface) {
+          const target = Number(this.filters.surface);
+          sorted = sorted.slice().sort((a, b) => {
+            const da = a.surface_habitable_logement ? Math.abs(a.surface_habitable_logement - target) : 9999;
+            const db = b.surface_habitable_logement ? Math.abs(b.surface_habitable_logement - target) : 9999;
+            return da - db;
+          });
+        }
+        this.results = {
+          total: data.total,
+          page: page,
+          limit: limit,
+          pages: Math.ceil(data.total / limit),
+          results: sorted,
+        };
+      } catch (e) {
+        this.error = e.message;
+        this.results = null;
+      } finally {
+        this.loading = false;
+      }
+    },
+
+    reset() {
+      this.filters = { commune: '', code_postal: '', surface: '', type_batiment: '', etiquette_dpe: '', annee_construction: '', conso: '', ges: '', dpe_year: '', dpe_month: '', dpe_day: '' };
+      this.results = null;
+      this.error = '';
+      history.replaceState(null, '', location.pathname);
+    },
+
+    satUrl(r) {
+      if (!r._geopoint) return '';
+      const [lat, lon] = r._geopoint.split(',').map(s => s.trim());
+      return 'https://maps.google.com/maps?q=' + lat + ',' + lon + '&z=18&t=k&output=embed';
+    },
+
+    mapsUrl(r) {
+      if (r._geopoint) {
+        const [lat, lon] = r._geopoint.split(',').map(s => s.trim());
+        return 'https://www.google.com/maps/search/?api=1&query=' + lat + ',' + lon;
+      }
+      return 'https://www.google.com/maps/search/' + encodeURIComponent(r.adresse_ban || '');
+    },
+
+    dpeColor(label) {
+      const c = { A:'#319834', B:'#33cc31', C:'#cbfc34', D:'#fbfe06', E:'#fbcc05', F:'#f78622', G:'#ef1d29' };
+      return c[(label || '').toUpperCase()] || '#ccc';
+    },
+  }).mount('#app');
+</script>
+</body>
+</html>
