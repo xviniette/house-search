@@ -1,4 +1,4 @@
-const APP_URL = "http://localhost:3456";
+const APP_URL = "https://xviniette.github.io/house-search";
 
 function extractLeBonCoin() {
   const data = {};
