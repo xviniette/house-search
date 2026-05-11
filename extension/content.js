@@ -1,4 +1,4 @@
-const DEV = true
+const DEV = false
 const APP_URL = DEV ? "http://localhost:5500" : "https://xviniette.github.io/house-search"
 
 function extractLeBonCoin() {
@@ -156,10 +156,69 @@ function extractSeLoger() {
     return data
 }
 
+function extractJinka() {
+    const data = {}
+    const raw = document.documentElement.innerHTML
+    const text = document.body.innerText
+
+    const cityM = raw.match(/\\"city\\":\\"([^"\\]+)/)
+    if (cityM) data.commune = cityM[1]
+
+    const zipM = raw.match(/\\"postal_code\\":\\"(\d{5})/)
+    if (zipM) data.code_postal = zipM[1]
+
+    const areaM = raw.match(/\\"area\\":(\d+)/)
+    if (areaM) data.surface = parseInt(areaM[1], 10)
+
+    const typeM = raw.match(/\\"type\\":\\"(Maison|Appartement|Studio|Loft|Terrain)/i)
+    if (typeM) data.type_batiment = typeM[1].toLowerCase()
+
+    const dpeM = raw.match(/\\"energy_dpe\\":\\"([A-G])/i)
+    if (dpeM) data.etiquette_dpe = dpeM[1].toUpperCase()
+
+    const yearM = raw.match(/\\"construction_year\\":(\d{4})/) || raw.match(/\\"year\\":(\d{4})/)
+    if (yearM) data.annee_construction = yearM[1]
+
+    if (!data.etiquette_dpe) {
+        const m = raw.match(/bg-dpe-([a-g])"><span[^>]*>([A-G])</)
+        if (m) data.etiquette_dpe = m[2].toUpperCase()
+    }
+
+    if (!data.surface) {
+        const m = text.match(/(\d+)\s*m[²2]/)
+        if (m) data.surface = parseInt(m[1], 10)
+    }
+
+    if (!data.commune || !data.code_postal) {
+        const og = document.querySelector('meta[property="og:title"]')
+        if (og) {
+            const t = og.getAttribute("content") || ""
+            const cityZip = t.match(/-\s*([^()]+?)\s*\((\d{5})\)/)
+            if (cityZip) {
+                if (!data.commune) data.commune = cityZip[1].trim()
+                if (!data.code_postal) data.code_postal = cityZip[2]
+            }
+            if (!data.type_batiment) {
+                const tt = t.match(/^(Maison|Appartement|Studio|Loft)/i)
+                if (tt) data.type_batiment = tt[1].toLowerCase()
+            }
+        }
+    }
+
+    const consoM = text.match(/(\d+)\s*kWh\/m[²2]/i)
+    if (consoM) data.conso = parseInt(consoM[1], 10)
+
+    const gesM = text.match(/(\d+)\s*kg\s*CO[₂2]\/m[²2]/i)
+    if (gesM) data.ges = parseInt(gesM[1], 10)
+
+    return data
+}
+
 function extractListingData() {
     const host = location.hostname
     if (host.includes("leboncoin")) return extractLeBonCoin()
     if (host.includes("seloger")) return extractSeLoger()
+    if (host.includes("jinka")) return extractJinka()
     return {}
 }
 

@@ -2,14 +2,15 @@
   "manifest_version": 3,
   "name": "DPE Finder - Trouver l'adresse d'un bien immobilier",
   "version": "1.0.0",
-  "description": "Retrouvez l'adresse exacte d'un bien immobilier en vente sur LeBonCoin ou SeLoger grâce à la base DPE ADEME (diagnostic de performance énergétique).",
+  "description": "Retrouvez l'adresse exacte d'un bien immobilier en vente sur LeBonCoin, SeLoger ou Jinka grâce à la base DPE ADEME (diagnostic de performance énergétique).",
   "permissions": ["activeTab"],
   "content_scripts": [
     {
       "matches": [
         "https://www.leboncoin.fr/ad/*",
         "https://www.leboncoin.fr/*/offer/*",
-        "https://www.seloger.com/annonces/*"
+        "https://www.seloger.com/annonces/*",
+        "https://www.jinka.fr/ad/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"],
