@@ -214,11 +214,58 @@ function extractJinka() {
     return data
 }
 
-function extractListingData() {
+async function extractBienIci() {
+    const data = {}
+    const slug = location.pathname.split("/").filter(Boolean).pop()
+    if (!slug) return data
+
+    try {
+        const res = await fetch(`https://www.bienici.com/realEstateAd.json?id=${encodeURIComponent(slug)}`, { credentials: "include" })
+        if (!res.ok) return data
+        const ad = await res.json()
+
+        if (ad.city) data.commune = ad.city
+        if (ad.postalCode) data.code_postal = ad.postalCode
+        if (ad.surfaceArea) data.surface = Math.round(ad.surfaceArea)
+
+        const typeMap = {
+            house: "maison",
+            townhouse: "maison",
+            castle: "maison",
+            manor: "maison",
+            chalet: "maison",
+            villa: "maison",
+            flat: "appartement",
+            loft: "appartement",
+            duplex: "appartement",
+            studio: "appartement",
+            building: "immeuble",
+            terrain: "terrain",
+            land: "terrain",
+            parking: "parking",
+            parkingbox: "parking",
+        }
+        if (ad.propertyType) data.type_batiment = typeMap[ad.propertyType] || "autre"
+
+        if (ad.energyClassification) data.etiquette_dpe = String(ad.energyClassification).toUpperCase()
+        if (ad.energyValue) data.conso = parseInt(ad.energyValue, 10)
+        if (ad.greenhouseGazValue) data.ges = parseInt(ad.greenhouseGazValue, 10)
+        if (ad.yearOfConstruction) data.annee_construction = String(ad.yearOfConstruction)
+        if (ad.energyPerformanceDiagnosticDate) {
+            const m = String(ad.energyPerformanceDiagnosticDate).match(/\d{4}-\d{2}-\d{2}/)
+            if (m) data.dpe_date = m[0]
+        }
+    } catch {}
+
+    return data
+}
+
+async function extractListingData() {
     const host = location.hostname
     if (host.includes("leboncoin")) return extractLeBonCoin()
     if (host.includes("seloger")) return extractSeLoger()
     if (host.includes("jinka")) return extractJinka()
+    if (host.includes("bienici")) return extractBienIci()
     return {}
 }
 
@@ -267,8 +314,8 @@ function injectPanel(data) {
     document.body.appendChild(wrapper)
 }
 
-function run() {
-    const data = extractListingData()
+async function run() {
+    const data = await extractListingData()
     if (data.commune || data.code_postal) {
         injectPanel(data)
     }
