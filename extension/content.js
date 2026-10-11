@@ -164,7 +164,8 @@ function buildAppUrl({ commune, code_postal, ...data }) {
 function injectPanel(data) {
     const existing = document.getElementById("dpe-finder-iframe")
     if (existing) {
-        existing.src = buildAppUrl(data)
+        // Setting src would push a history entry, so the site's back button would navigate the iframe instead of the page
+        existing.contentWindow.location.replace(buildAppUrl(data))
         return
     }
 
