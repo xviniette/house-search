@@ -7,11 +7,10 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.leboncoin.fr/ad/*",
-        "https://www.leboncoin.fr/*/offer/*",
-        "https://www.seloger.com/annonces/*",
-        "https://www.jinka.fr/ad/*",
-        "https://www.bienici.com/annonce/*"
+        "https://www.leboncoin.fr/*",
+        "https://www.seloger.com/*",
+        "https://www.bienici.com/*",
+        "https://www.jinka.fr/ad/*"
       ],
       "js": ["content.js"],
       "css": ["content.css"],

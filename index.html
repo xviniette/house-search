@@ -9,16 +9,15 @@
     </head>
     <body class="bg-gray-50 min-h-screen text-gray-900">
         <div id="app" @vue:mounted="onMounted">
-            <div class="bg-indigo-600 px-6 py-5">
-                <h1 class="text-white text-xl font-bold">House Finder</h1>
-            </div>
-
             <div class="max-w-3xl mx-auto px-4 py-6">
                 <div class="bg-white rounded-xl shadow-sm p-5 mb-5">
                     <div class="grid grid-cols-2 sm:grid-cols-3 gap-2" @input="scheduleSearch" @change="scheduleSearch">
                         <div>
-                            <label :class="labelClass">Code postal</label>
-                            <input v-model="filters.code_postal" type="text" inputmode="numeric" placeholder="75001" :class="inputClass" />
+                            <label :class="labelClass">Ville</label>
+                            <input v-model="filters.commune" @input="onCommuneInput" list="communes" type="text" placeholder="Lyon" :class="inputClass" />
+                            <datalist id="communes">
+                                <option v-for="s in communeSuggestions" :value="s.label"></option>
+                            </datalist>
                         </div>
                         <div>
                             <label :class="labelClass">Surface (m²)</label>
@@ -49,27 +48,13 @@
                             </select>
                         </div>
                         <div>
-                            <label :class="labelClass">Année construction</label>
-                            <input v-model="filters.annee_construction" type="number" inputmode="numeric" placeholder="2015" :class="inputClass" />
-                        </div>
-                        <div>
-                            <label :class="labelClass">GES (kgCO₂/m².an)</label>
-                            <input v-model="filters.ges" type="text" inputmode="numeric" placeholder="13" :class="inputClass" />
-                        </div>
-                        <div>
                             <label :class="labelClass">Date DPE</label>
                             <input v-model="filters.dpe_date" type="date" :class="inputClass" />
                         </div>
-                    </div>
-
-                    <div class="flex items-center gap-2 mt-4">
-                        <button
-                            @click="search(1)"
-                            :disabled="loading"
-                            class="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white font-semibold text-sm px-5 py-2.5 rounded-lg transition-colors"
-                        >
-                            {{ loading ? 'Recherche...' : 'Rechercher' }}
-                        </button>
+                        <div>
+                            <label :class="labelClass">Année construction</label>
+                            <input v-model="filters.annee_construction" type="number" inputmode="numeric" placeholder="1995" :class="inputClass" />
+                        </div>
                     </div>
                 </div>
 
@@ -78,7 +63,9 @@
                 <div v-if="results">
                     <div class="flex items-baseline justify-between mb-3">
                         <h2 class="text-xs font-semibold uppercase tracking-wide text-indigo-600">Resultats</h2>
-                        <span class="text-sm text-gray-400">{{ results.total }} adresse{{ results.total > 1 ? 's' : '' }}</span>
+                        <span class="text-sm text-gray-400">
+                            <template v-if="results.place">{{ results.place }} · </template>{{ results.total }} adresse{{ results.total > 1 ? 's' : '' }}
+                        </span>
                     </div>
 
                     <div v-if="sortedResults.length === 0" class="text-center py-12 text-gray-400">
@@ -93,10 +80,11 @@
                         <a :href="mapsUrl(r)" target="_blank" rel="noopener" class="block p-3.5 no-underline text-inherit">
                             <div class="font-semibold text-sm">{{ r.adresse_ban || 'Adresse non renseignée' }}</div>
                             <div class="flex flex-wrap gap-x-3 mt-1 text-xs text-gray-500">
-                                <span v-if="r.date_etablissement_dpe">{{ r.date_etablissement_dpe.slice(0, 10) }}</span>
-                                <span v-if="r.etiquette_dpe">DPE {{ r.etiquette_dpe }}</span>
-                                <span v-if="r.etiquette_ges">GES {{ r.etiquette_ges }}</span>
-                                <span v-if="r.surface_habitable_logement">{{ r.surface_habitable_logement }} m²</span>
+                                <span v-if="r.date_etablissement_dpe" :class="exactClass(r.date_etablissement_dpe.slice(0, 10) === filters.dpe_date)">{{ r.date_etablissement_dpe.slice(0, 10) }}</span>
+                                <span v-if="r.etiquette_dpe" :class="exactClass(r.etiquette_dpe === filters.etiquette_dpe)">DPE {{ r.etiquette_dpe }}</span>
+                                <span v-if="r.etiquette_ges" :class="exactClass(r.etiquette_ges === filters.etiquette_ges)">GES {{ r.etiquette_ges }}</span>
+                                <span v-if="r.surface_habitable_logement" :class="exactClass(Math.round(r.surface_habitable_logement) === Number(filters.surface))">{{ r.surface_habitable_logement }} m²</span>
+                                <span v-if="r.annee_construction || r.periode_construction" :class="exactClass(r.annee_construction === Number(filters.annee_construction))">{{ r.annee_construction || r.periode_construction }}</span>
                             </div>
                         </a>
                         <div v-if="r._geopoint" class="h-44">
@@ -113,19 +101,18 @@
             PetiteVue.createApp({
                 filters: {
                     commune: "",
-                    code_postal: "",
                     surface: "",
                     type_batiment: "",
                     etiquette_dpe: "",
                     etiquette_ges: "",
-                    annee_construction: "",
-                    ges: "",
                     dpe_date: "",
+                    annee_construction: "",
                 },
                 results: null,
                 loading: false,
                 error: "",
                 dpeLabels: ["A", "B", "C", "D", "E", "F", "G"],
+                communeSuggestions: [],
 
                 labelClass: "block text-[11px] uppercase tracking-wide text-gray-400 mb-1",
                 inputClass: "w-full border border-gray-200 rounded-md px-2 py-1 text-xs focus:outline-none focus:border-indigo-500 bg-white",
@@ -151,10 +138,31 @@
                     const params = new URLSearchParams(location.search)
                     for (const [key, val] of params) {
                         if (key in this.filters && val) {
-                            this.filters[key] = key === "surface" || key === "ges" ? Number(val) : val
+                            this.filters[key] = key === "surface" || key === "annee_construction" ? Number(val) : val
                         }
                     }
                     if (Object.values(this.filters).some(v => v !== "" && v != null)) this.search(1)
+                },
+
+                onCommuneInput(e) {
+                    const q = e.target.value
+                    clearTimeout(this._suggestTimer)
+                    if (this.communeSuggestions.some(s => s.label === q)) return
+                    this._suggestTimer = setTimeout(() => this.suggestCommunes(q), 200)
+                },
+
+                async suggestCommunes(q) {
+                    if (q.length < 2) {
+                        this.communeSuggestions = []
+                        return
+                    }
+                    const params = new URLSearchParams({ nom: q, fields: "nom,codeDepartement", boost: "population", limit: "8" })
+                    try {
+                        const res = await fetch("https://geo.api.gouv.fr/communes?" + params)
+                        const communes = res.ok ? await res.json() : []
+                        if (q !== this.filters.commune) return
+                        this.communeSuggestions = communes.map(c => ({ ...c, label: c.nom + " (" + c.codeDepartement + ")" }))
+                    } catch {}
                 },
 
                 scheduleSearch() {
@@ -185,17 +193,16 @@
                     this.syncUrl()
 
                     const qs = []
-                    if (this.filters.code_postal) {
-                        const codes = await this.getNearbyPostalCodes()
-                        if (codes && codes.length) {
-                            qs.push("code_postal_ban:(" + codes.join(" OR ") + ")")
-                        } else {
-                            this.error = "Impossible de récupérer les codes postaux voisins."
+                    let place = null
+                    if (this.filters.commune) {
+                        place = await this.getNearbyPostalCodes()
+                        if (!place) {
+                            this.error = "Ville introuvable."
+                            this.results = null
                             this.loading = false
                             return
                         }
-                    } else if (this.filters.commune) {
-                        qs.push("nom_commune_ban:" + this.filters.commune)
+                        qs.push("code_postal_ban:(" + place.codes.join(" OR ") + ")")
                     }
                     if (this.filters.surface) {
                         const s = Number(this.filters.surface)
@@ -205,7 +212,6 @@
                     if (this.filters.etiquette_dpe) qs.push("etiquette_dpe:" + this.filters.etiquette_dpe)
                     if (this.filters.etiquette_ges) qs.push("etiquette_ges:" + this.filters.etiquette_ges)
                     if (this.filters.type_batiment) qs.push("type_batiment:" + this.filters.type_batiment)
-                    if (this.filters.annee_construction) qs.push("annee_construction:" + this.filters.annee_construction)
                     if (this.filters.dpe_date) {
                         const delta = 5
                         const center = new Date(this.filters.dpe_date + "T00:00:00Z")
@@ -216,10 +222,9 @@
                         const fmt = d => d.toISOString().slice(0, 10)
                         qs.push("date_etablissement_dpe:[" + fmt(start) + " TO " + fmt(end) + "]")
                     }
-                    if (this.filters.ges) {
-                        const g = Number(this.filters.ges)
-                        const m = Math.max(1, Math.round(g * 0.05))
-                        qs.push("emission_ges_5_usages_par_m2:[" + (g - m) + " TO " + (g + m) + "]")
+                    if (this.filters.annee_construction) {
+                        // annee_construction is missing on ~1/3 of DPEs, periode_construction is always set
+                        qs.push('periode_construction:"' + this.periodeConstruction(Number(this.filters.annee_construction)) + '"')
                     }
 
                     if (qs.length === 0) {
@@ -245,6 +250,7 @@
                             limit: limit,
                             pages: Math.ceil(data.total / limit),
                             results: data.results,
+                            place: place?.label,
                         }
                     } catch (e) {
                         this.error = e.message
@@ -254,35 +260,35 @@
                     }
                 },
 
-                async geocode() {
-                    const params = new URLSearchParams()
-                    const q = [this.filters.commune, this.filters.code_postal].filter(Boolean).join(" ")
-                    if (!q) return null
-                    params.set("q", q)
-                    if (this.filters.code_postal) params.set("postcode", this.filters.code_postal)
-                    params.set("limit", "1")
+                async findCommune() {
+                    // "Saint-Denis (93)": the department disambiguates homonyms
+                    const [, nom, codeDepartement] = this.filters.commune.trim().match(/^(.*?)\s*(?:\((\w{2,3})\))?$/)
+                    const params = new URLSearchParams({
+                        // geo.api doesn't know arrondissements ("Paris 15ème")
+                        nom: nom.replace(/\s+\d+\s*(?:er|e|ème|eme)?(?:\s+arrondissement)?$/i, ""),
+                        fields: "nom,codesPostaux,centre,codeDepartement",
+                        boost: "population",
+                        limit: "1",
+                    })
+                    if (codeDepartement) params.set("codeDepartement", codeDepartement)
                     try {
-                        const res = await fetch("https://api-adresse.data.gouv.fr/search/?" + params)
-                        const data = await res.json()
-                        const f = data.features?.[0]
-                        if (!f) return null
-                        const [lon, lat] = f.geometry.coordinates
-                        return { lon, lat }
+                        const res = await fetch("https://geo.api.gouv.fr/communes?" + params)
+                        const [found] = res.ok ? await res.json() : []
+                        return found?.centre ? found : null
                     } catch {
                         return null
                     }
                 },
 
                 async getNearbyPostalCodes() {
-                    const center = await this.geocode()
-                    if (!center) return null
-                    const cp = String(this.filters.code_postal)
-                    const dept = cp.startsWith("97") || cp.startsWith("98") ? cp.slice(0, 3) : cp.slice(0, 2)
-                    if (!dept) return null
+                    const commune = await this.findCommune()
+                    if (!commune) return null
+                    const [lon, lat] = commune.centre.coordinates
+                    const center = { lon, lat }
+                    const codes = new Set(commune.codesPostaux)
                     try {
-                        const res = await fetch(`https://geo.api.gouv.fr/departements/${dept}/communes?fields=codesPostaux,centre`)
-                        if (!res.ok) return null
-                        const communes = await res.json()
+                        const res = await fetch(`https://geo.api.gouv.fr/departements/${commune.codeDepartement}/communes?fields=codesPostaux,centre`)
+                        const communes = res.ok ? await res.json() : []
                         const radius = 5
                         const toRad = d => (d * Math.PI) / 180
                         const haversine = (lat1, lon1, lat2, lon2) => {
@@ -292,7 +298,6 @@
                             const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2
                             return 2 * R * Math.asin(Math.sqrt(a))
                         }
-                        const codes = new Set()
                         for (const c of communes) {
                             const coords = c.centre?.coordinates
                             if (!coords) continue
@@ -301,10 +306,17 @@
                                 for (const pc of c.codesPostaux || []) codes.add(pc)
                             }
                         }
-                        return [...codes]
-                    } catch {
-                        return null
-                    }
+                    } catch {}
+                    return { label: commune.nom + " (" + commune.codeDepartement + ")", codes: [...codes] }
+                },
+
+                periodeConstruction(year) {
+                    const periods = [[1947, "avant 1948"], [1974, "1948-1974"], [1977, "1975-1977"], [1982, "1978-1982"], [1988, "1983-1988"], [2000, "1989-2000"], [2005, "2001-2005"], [2012, "2006-2012"], [2021, "2013-2021"]]
+                    return periods.find(([max]) => year <= max)?.[1] || "après 2021"
+                },
+
+                exactClass(exact) {
+                    return exact ? "text-green-600 font-semibold" : ""
                 },
 
                 satUrl(r) {

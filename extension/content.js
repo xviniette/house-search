@@ -1,165 +1,62 @@
 const DEV = false
 const APP_URL = DEV ? "http://localhost:5500" : "https://xviniette.github.io/house-search"
 
-function extractLeBonCoin() {
-    const data = {}
+const initialPath = location.pathname
 
-    const nextData = document.querySelector("script#__NEXT_DATA__")
-    if (nextData) {
-        try {
-            const json = JSON.parse(nextData.textContent)
-            const ad = json?.props?.pageProps?.ad
-            if (ad) {
-                if (ad.location?.city) data.commune = ad.location.city
-                if (ad.location?.zipcode) data.code_postal = ad.location.zipcode
-
-                for (const attr of ad.attributes || []) {
-                    const key = attr.key || attr.key_label || ""
-                    const val = attr.value || attr.value_label || ""
-                    if (key === "square") data.surface = parseInt(val, 10)
-                    if (key === "real_estate_type") {
-                        const m = { 1: "maison", 2: "appartement", 3: "terrain", 4: "parking", 5: "autre" }
-                        data.type_batiment = m[val] || val
-                    }
-                    if (key === "energy_rate") data.etiquette_dpe = val.toUpperCase()
-                    if (key.includes("date") && val.match(/^\d{4}-\d{2}-\d{2}/)) data.dpe_date = val.slice(0, 10)
-                }
-
-                if (!data.dpe_date && ad.body) {
-                    const dates = [...ad.body.matchAll(/(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/g)]
-                    for (const d of dates) {
-                        const year = parseInt(d[3])
-                        const month = parseInt(d[2])
-                        if (year >= 2020 && year <= 2030 && month >= 1 && month <= 12) {
-                            data.dpe_date = `${d[3]}-${String(d[2]).padStart(2, "0")}-${String(d[1]).padStart(2, "0")}`
-                            break
-                        }
-                    }
-                }
-            }
-        } catch {}
-    }
-
-    if (!data.commune || !data.code_postal) {
-        const loc = document.querySelector('[data-qa-id="adview_location_text"]')
-        if (loc) {
-            const t = loc.textContent.trim()
-            const cp = t.match(/(\d{5})/)
-            if (cp && !data.code_postal) data.code_postal = cp[1]
-            const cm = t.match(/^([^0-9]+)/)
-            if (cm && !data.commune) data.commune = cm[1].trim().replace(/,$/, "").trim()
-        }
-    }
-
-    if (!data.surface) {
-        const text = document.body.innerText
-        const m = text.match(/Surface\s*(?:habitable\s*)?[:\s]*(\d+)\s*m²/i) || text.match(/(\d+)\s*m²/i)
-        if (m) data.surface = parseInt(m[1], 10)
-    }
-
-    if (!data.conso) {
-        const text = document.body.innerText
-        const m = text.match(/(\d+)\s*kWh\s*(?:EP\s*)?\/\s*m[²2]/i)
-        if (m) data.conso = parseInt(m[1], 10)
-    }
-
-    if (!data.ges) {
-        const text = document.body.innerText
-        const m = text.match(/(\d+)\s*kg\s*(?:ep\s*)?CO[₂2]\s*\/\s*m[²2]/i)
-        if (m) data.ges = parseInt(m[1], 10)
-    }
-
-    if (!data.etiquette_dpe) {
-        const el = document.querySelector('[data-qa-id="criteria_item_energy_rate"] .value')
-        if (el) {
-            const m = el.textContent.match(/([A-G])/i)
-            if (m) data.etiquette_dpe = m[1].toUpperCase()
-        }
-    }
-
-    const criteriaItems = document.querySelectorAll('[data-qa-id^="criteria_item_"]')
-    for (const item of criteriaItems) {
-        const label = (item.querySelector('[class*="Label"], .label, dt') || {}).textContent || ""
-        const value = (item.querySelector('[class*="Value"], .value, dd') || {}).textContent || ""
-        const lo = label.toLowerCase().trim()
-        const v = value.trim()
-
-        if (!data.surface && lo.includes("surface")) {
-            const m = v.match(/(\d+)/)
-            if (m) data.surface = parseInt(m[1], 10)
-        }
-        if (!data.type_batiment && lo.includes("type de bien")) {
-            data.type_batiment = v.toLowerCase()
-        }
-        if (!data.etiquette_dpe && (lo.includes("classe énergie") || lo.includes("dpe"))) {
-            const m = v.match(/([A-G])/i)
-            if (m) data.etiquette_dpe = m[1].toUpperCase()
-        }
-    }
-
-    if (!data.type_batiment) {
-        const text = document.body.innerText
-        const m = text.match(/Type de bien\s*[:\s]*(Maison|Appartement|Immeuble)/i)
-        if (m) data.type_batiment = m[1].toLowerCase()
-    }
-
-    return data
+function parseJson(text) {
+    try {
+        return JSON.parse(text)
+    } catch {}
 }
 
-function extractSeLoger() {
-    const data = {}
-    const text = document.body.innerText
-    const raw = document.documentElement.innerHTML
-
-    const cityM = raw.match(/av_city[\\"]+"?\s*[:,]\s*[\\"]+"?([^"\\]+)/)
-    if (cityM) data.commune = cityM[1]
-
-    const zipM = raw.match(/av_zip_code[\\"]+"?\s*[:,]\s*[\\"]+"?(\d{5})/)
-    if (zipM) data.code_postal = zipM[1]
-
-    const dpeM = raw.match(/av_energy_certificate[\\"]+"?\s*[:,]\s*[\\"]+"?([A-G])/i)
-    if (dpeM) data.etiquette_dpe = dpeM[1].toUpperCase()
-
-    const yearM = raw.match(/Année de construction[\\",]*[\\",]*value[\\",]*[\\",]*(\d{4})/i) || text.match(/Année de construction\s*(\d{4})/i)
-    if (yearM) data.annee_construction = yearM[1]
-
-    const consoM = text.match(/(\d+)\s*kWh\/m[²2][\.\s]*an/i) || raw.match(/(\d+)\s*kWh\/m/)
-    if (consoM) data.conso = parseInt(consoM[1], 10)
-
-    const gesM = text.match(/(\d+)\s*kg\s*CO[₂2]\/m[²2]/i) || raw.match(/(\d+)\s*kg\s*CO/)
-    if (gesM) data.ges = parseInt(gesM[1], 10)
-
-    const url = location.pathname
-    if (!data.type_batiment) {
-        if (url.includes("/maison/")) data.type_batiment = "maison"
-        else if (url.includes("/appartement/")) data.type_batiment = "appartement"
-    }
-
-    if (!data.commune) {
-        const m = url.match(/\/([\w-]+)-(\d{2})\//)
-        if (m) data.commune = m[1].replace(/-/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-    }
-
-    const surfM = text.match(/(\d+)\s*m²/)
-    if (surfM) data.surface = parseInt(surfM[1], 10)
-
-    const title = document.querySelector("title")
-    if (title) {
-        const tm = title.textContent.match(/(\d+)\s*m²/)
-        if (tm && !data.surface) data.surface = parseInt(tm[1], 10)
-        if (!data.type_batiment) {
-            const tt = title.textContent.match(/^(Maison|Appartement)/i)
-            if (tt) data.type_batiment = tt[1].toLowerCase()
-        }
-    }
-
-    return data
+function dpeLetter(value) {
+    const v = String(value || "").trim().toUpperCase()
+    return /^[A-G]$/.test(v) ? v : undefined
 }
 
-function extractJinka() {
+function findDpeDate(text) {
+    const m = String(text || "").match(/(?:dpe|diagnostic|réalisé|établi)\D{0,60}(\d{1,2})[\/.-](\d{1,2})[\/.-](20\d{2})/i)
+    if (!m || Number(m[2]) > 12) return undefined
+    return `${m[3]}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`
+}
+
+function extractLeBonCoin(doc) {
+    const ad = parseJson(doc.getElementById("__NEXT_DATA__")?.textContent)?.props?.pageProps?.ad
+    if (!ad) return {}
+    const attrs = Object.fromEntries((ad.attributes || []).map(a => [a.key, a.value]))
+    return {
+        commune: ad.location?.city,
+        code_postal: ad.location?.zipcode,
+        surface: parseInt(attrs.square, 10) || undefined,
+        type_batiment: { 1: "maison", 2: "appartement" }[attrs.real_estate_type],
+        etiquette_dpe: dpeLetter(attrs.energy_rate),
+        dpe_date: findDpeDate(ad.body),
+    }
+}
+
+function extractSeLoger(doc) {
+    // Data is a JSON string literal: JSON.parse("{\"app_cldp\":...}")
+    const literal = doc.getElementById("__UFRN_LIFECYCLE_SERVERREQUEST__")?.textContent.match(/JSON\.parse\(("[\s\S]*")\)/)?.[1]
+    const classified = parseJson(parseJson(literal))?.app_cldp?.data?.classified
+    if (!classified) return {}
+    const sections = classified.sections || {}
+    const space = sections.hardFacts?.facts?.find(f => f.type === "livingSpace")?.splitValue
+    const scales = (sections.energy?.certificates || []).flatMap(c => c.scales || [])
+    const rating = prefix => dpeLetter(scales.find(s => s.type?.startsWith(prefix))?.efficiencyClass?.rating)
+    return {
+        commune: sections.location?.address?.city,
+        code_postal: sections.location?.address?.zipCode,
+        surface: Math.round(parseFloat(String(space).replace(",", "."))) || undefined,
+        type_batiment: { HOUSE: "maison", APARTMENT: "appartement", BUILDING: "immeuble" }[classified.rawData?.propertyType],
+        etiquette_dpe: rating("FR_ENERGY"),
+        dpe_date: findDpeDate(sections.description?.description),
+    }
+}
+
+function extractJinka(doc) {
     const data = {}
-    const raw = document.documentElement.innerHTML
-    const text = document.body.innerText
+    const raw = doc.documentElement.innerHTML
+    const text = doc.body.innerText
 
     const cityM = raw.match(/\\"city\\":\\"([^"\\]+)/)
     if (cityM) data.commune = cityM[1]
@@ -176,9 +73,6 @@ function extractJinka() {
     const dpeM = raw.match(/\\"energy_dpe\\":\\"([A-G])/i)
     if (dpeM) data.etiquette_dpe = dpeM[1].toUpperCase()
 
-    const yearM = raw.match(/\\"construction_year\\":(\d{4})/) || raw.match(/\\"year\\":(\d{4})/)
-    if (yearM) data.annee_construction = yearM[1]
-
     if (!data.etiquette_dpe) {
         const m = raw.match(/bg-dpe-([a-g])"><span[^>]*>([A-G])</)
         if (m) data.etiquette_dpe = m[2].toUpperCase()
@@ -190,7 +84,7 @@ function extractJinka() {
     }
 
     if (!data.commune || !data.code_postal) {
-        const og = document.querySelector('meta[property="og:title"]')
+        const og = doc.querySelector('meta[property="og:title"]')
         if (og) {
             const t = og.getAttribute("content") || ""
             const cityZip = t.match(/-\s*([^()]+?)\s*\((\d{5})\)/)
@@ -205,89 +99,72 @@ function extractJinka() {
         }
     }
 
-    const consoM = text.match(/(\d+)\s*kWh\/m[²2]/i)
-    if (consoM) data.conso = parseInt(consoM[1], 10)
-
-    const gesM = text.match(/(\d+)\s*kg\s*CO[₂2]\/m[²2]/i)
-    if (gesM) data.ges = parseInt(gesM[1], 10)
-
     return data
 }
 
-async function extractBienIci() {
-    const data = {}
-    const slug = location.pathname.split("/").filter(Boolean).pop()
-    if (!slug) return data
-
-    try {
-        const res = await fetch(`https://www.bienici.com/realEstateAd.json?id=${encodeURIComponent(slug)}`, { credentials: "include" })
-        if (!res.ok) return data
-        const ad = await res.json()
-
-        if (ad.city) data.commune = ad.city
-        if (ad.postalCode) data.code_postal = ad.postalCode
-        if (ad.surfaceArea) data.surface = Math.round(ad.surfaceArea)
-
-        const typeMap = {
-            house: "maison",
-            townhouse: "maison",
-            castle: "maison",
-            manor: "maison",
-            chalet: "maison",
-            villa: "maison",
-            flat: "appartement",
-            loft: "appartement",
-            duplex: "appartement",
-            studio: "appartement",
-            building: "immeuble",
-            terrain: "terrain",
-            land: "terrain",
-            parking: "parking",
-            parkingbox: "parking",
-        }
-        if (ad.propertyType) data.type_batiment = typeMap[ad.propertyType] || "autre"
-
-        if (ad.energyClassification) data.etiquette_dpe = String(ad.energyClassification).toUpperCase()
-        if (ad.energyValue) data.conso = parseInt(ad.energyValue, 10)
-        if (ad.greenhouseGazValue) data.ges = parseInt(ad.greenhouseGazValue, 10)
-        if (ad.yearOfConstruction) data.annee_construction = String(ad.yearOfConstruction)
-        if (ad.energyPerformanceDiagnosticDate) {
-            const m = String(ad.energyPerformanceDiagnosticDate).match(/\d{4}-\d{2}-\d{2}/)
-            if (m) data.dpe_date = m[0]
-        }
-    } catch {}
-
-    return data
+async function extractBienIci(id) {
+    const res = await fetch(`https://www.bienici.com/realEstateAd.json?id=${encodeURIComponent(id)}`, { credentials: "include" })
+    if (!res.ok) return {}
+    const ad = await res.json()
+    const types = {
+        house: "maison",
+        townhouse: "maison",
+        villa: "maison",
+        chalet: "maison",
+        castle: "maison",
+        manor: "maison",
+        flat: "appartement",
+        loft: "appartement",
+        duplex: "appartement",
+        studio: "appartement",
+        building: "immeuble",
+    }
+    return {
+        commune: ad.city,
+        code_postal: ad.postalCode,
+        surface: Math.round(ad.surfaceArea) || undefined,
+        type_batiment: types[ad.propertyType],
+        etiquette_dpe: dpeLetter(ad.energyClassification),
+        dpe_date: String(ad.energyPerformanceDiagnosticDate || "").match(/\d{4}-\d{2}-\d{2}/)?.[0],
+    }
 }
 
-async function extractListingData() {
-    const host = location.hostname
-    if (host.includes("leboncoin")) return extractLeBonCoin()
-    if (host.includes("seloger")) return extractSeLoger()
-    if (host.includes("jinka")) return extractJinka()
-    if (host.includes("bienici")) return extractBienIci()
-    return {}
+// After an in-app navigation the page's embedded data is stale, so refetch the ad HTML
+async function fromPage(extract) {
+    const data = location.pathname === initialPath ? extract(document) : {}
+    if (data.commune) return data
+    const res = await fetch(location.href, { credentials: "include" })
+    return extract(new DOMParser().parseFromString(await res.text(), "text/html"))
 }
 
-function buildAppUrl(data) {
+const SITES = [
+    { host: "leboncoin.fr", adId: /^\/ad\/[^/]+\/(\d+)/, extract: () => fromPage(extractLeBonCoin) },
+    { host: "seloger.com", adId: /^\/annonces?\/.+\/(\w+?)(?:\.htm)?$/, extract: () => fromPage(extractSeLoger) },
+    { host: "bienici.com", adId: /^\/annonce\/.+\/([^/]+)$/, extract: extractBienIci },
+    { host: "jinka.fr", adId: /^\/ad\/(.+)/, extract: () => fromPage(extractJinka) },
+]
+
+function departement(cp) {
+    if (/^9[78]/.test(cp)) return cp.slice(0, 3)
+    if (cp.startsWith("20")) return cp < "20200" ? "2A" : "2B"
+    return cp.slice(0, 2)
+}
+
+function buildAppUrl({ commune, code_postal, ...data }) {
     const params = new URLSearchParams()
-    if (data.commune) params.set("commune", data.commune)
-    if (data.surface) params.set("surface", data.surface)
-    if (data.type_batiment) params.set("type_batiment", data.type_batiment)
-    if (data.etiquette_dpe) params.set("etiquette_dpe", data.etiquette_dpe)
-    if (data.annee_construction) params.set("annee_construction", data.annee_construction)
-    if (data.conso) params.set("conso", data.conso)
-    if (data.ges) params.set("ges", data.ges)
-    if (data.dpe_date) params.set("dpe_date", data.dpe_date)
+    // The app disambiguates homonyms with "Ville (dept)"
+    params.set("commune", code_postal ? `${commune} (${departement(String(code_postal))})` : commune)
+    for (const [key, val] of Object.entries(data)) {
+        if (val) params.set(key, val)
+    }
     params.set("from", "extension")
     return `${APP_URL}?${params}`
 }
 
 function injectPanel(data) {
-    const existing = document.getElementById("dpe-finder-panel")
+    const existing = document.getElementById("dpe-finder-iframe")
     if (existing) {
-        const iframe = existing.querySelector("#dpe-finder-iframe")
-        iframe.src = buildAppUrl(data)
+        existing.src = buildAppUrl(data)
         return
     }
 
@@ -314,37 +191,25 @@ function injectPanel(data) {
     document.body.appendChild(wrapper)
 }
 
-async function run() {
-    const data = await extractListingData()
-    if (data.commune || data.code_postal) {
-        injectPanel(data)
-    }
+function removePanel() {
+    document.getElementById("dpe-finder-panel")?.remove()
 }
 
-let lastUrl = location.href
+const site = SITES.find(s => location.hostname.endsWith(s.host))
+let currentId = null
 
-function watchNavigation() {
-    const check = () => {
-        if (location.href !== lastUrl) {
-            lastUrl = location.href
-            setTimeout(run, 2000)
-        }
-    }
+async function refresh() {
+    const id = location.pathname.match(site.adId)?.[1]
+    if (id === currentId) return
+    currentId = id
+    if (!id) return removePanel()
 
-    new MutationObserver(check).observe(document.body, { childList: true, subtree: true })
-
-    const wrap = method => {
-        const orig = history[method]
-        history[method] = function () {
-            const result = orig.apply(this, arguments)
-            check()
-            return result
-        }
-    }
-    wrap("pushState")
-    wrap("replaceState")
-    window.addEventListener("popstate", check)
+    const data = await site.extract(id).catch(() => ({}))
+    if (id !== currentId) return
+    if (data.commune) injectPanel(data)
+    else removePanel()
 }
 
-setTimeout(run, 2000)
-watchNavigation()
+// SPAs (Bien'ici, LeBonCoin, SeLoger) switch ads without reloading, and pushState can't be hooked from the isolated world
+setInterval(refresh, 500)
+refresh()
